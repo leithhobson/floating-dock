@@ -29,6 +29,7 @@
     <value value='0' nick='ALL_WINDOWS'/>
     <value value='1' nick='FOCUS_APPLICATION_WINDOWS'/>
     <value value='2' nick='MAXIMIZED_WINDOWS'/>
+    <value value='3' nick='ALWAYS_ON_TOP'/>
   </enum>
   <enum id='org.gnome.shell.extensions.dash-to-dock.transparency-mode'>
     <value value='0' nick='DEFAULT'/>
@@ -218,6 +219,11 @@
       <summary>Provide workspace isolation</summary>
       <description>Dash shows only windows from the currentworkspace</description>
     </key>
+    <key type="b" name="workspace-agnostic-urgent-windows">
+      <default>true</default>
+      <summary>Show urgent windows on each workspace</summary>
+      <description>Show or hide urgent windows on each workspace in the dash</description>
+    </key>
     <key type="b" name="isolate-monitors">
       <default>false</default>
       <summary>Provide monitor isolation</summary>
@@ -282,9 +288,14 @@
       <summary>Extend the dock container to all the available height</summary>
     </key>
     <key type="i" name="preferred-monitor">
-      <default>-1</default>
-      <summary>Monitor on which putting the dock</summary>
-      <description>Set on which monitor to put the dock, use -1 for the primary one</description>
+      <default>-2</default>
+      <summary>DEPRECATED: Monitor on which putting the dock (by index)</summary>
+      <description>Set on which monitor to put the dock, use -1 for the primary one. Use -2 refer to the 'preferred-monitor-by-connector' setting instead (this is the preferred value).</description>
+    </key>
+    <key type="s" name="preferred-monitor-by-connector">
+      <default>"primary"</default>
+      <summary>Monitor on which putting the dock (by connector)</summary>
+      <description>Set on which monitor to put the dock, for example 'DisplayPort-0'. Use 'primary' for primary one. This setting is only used if 'preferred-monitor' is -2.</description>
     </key>
     <key type="b" name="multi-monitor">
       <default>false</default>
@@ -568,6 +579,11 @@
       <default>false</default>
       <summary>Enable unity7 like glossy backlit items</summary>
       <description>Emulate the unity7 backlit glossy items behaviour</description>
+    </key>
+    <key name="apply-glossy-effect" type="b">
+      <default>true</default>
+      <summary>Enable glossy effect</summary>
+      <description>Toggle the glossy effect of the unity7 backlit feature.</description>
     </key>
   </schema>
 </schemalist>

@@ -260,12 +260,13 @@ var DockAbstractAppIcon = GObject.registerClass({
         case Clutter.ScrollDirection.DOWN:
             direction = Meta.MotionDirection.DOWN;
             break;
-        case Clutter.ScrollDirection.SMOOTH:
+        case Clutter.ScrollDirection.SMOOTH: {
             let [, dy] = Clutter.get_current_event().get_scroll_delta();
             if (dy < 0)
                 direction = Meta.MotionDirection.UP;
             else if (dy > 0)
                 direction = Meta.MotionDirection.DOWN;
+            }
             break;
         }
 
@@ -623,8 +624,7 @@ var DockAbstractAppIcon = GObject.registerClass({
                 break;
 
             case clickAction.SKIP:
-                let w = windows[0];
-                Main.activateWindow(w);
+                Main.activateWindow(windows[0]);
                 break;
             }
         }
@@ -1021,8 +1021,7 @@ const DockAppIconMenu = class DockAppIconMenu extends PopupMenu.PopupMenu {
             this._allWindowsMenuItem.hide();
             this.addMenuItem(this._allWindowsMenuItem);
         } else {
-            const windows = this._source.getInterestingWindows().filter(
-                w => !w.skip_taskbar);
+            const windows = this._source.getInterestingWindows();
 
             if (windows.length > 0) {
                 this.addMenuItem(
@@ -1247,18 +1246,24 @@ function getInterestingWindows(windows, monitorIndex) {
     let settings = Docking.DockManager.settings;
 
     // When using workspace isolation, we filter out windows
-    // that are not in the current workspace
-    if (settings.get_boolean('isolate-workspaces'))
+    // that are neither in the current workspace nor marked urgent
+    if (settings.get_boolean('isolate-workspaces')) {
+        const showUrgent = settings.get_boolean('workspace-agnostic-urgent-windows');
+        const activeWorkspace = global.workspace_manager.get_active_workspace_index();
         windows = windows.filter(function(w) {
-            return w.get_workspace().index() == global.workspace_manager.get_active_workspace_index();
+            const inWorkspace = w.get_workspace().index() === activeWorkspace;
+            const isUrgent = w.urgent || w.demandsAttention || w._manualUrgency;
+            return inWorkspace || (showUrgent && isUrgent);
         });
+    }
 
-    if (settings.get_boolean('isolate-monitors'))
+    if (settings.get_boolean('isolate-monitors')) {
         windows = windows.filter(function(w) {
-            return w.get_monitor() == monitorIndex;
+            return w.get_monitor() === monitorIndex;
         });
+    }
 
-    return windows;
+    return windows.filter(w => !w.skipTaskbar);
 }
 
 /**
@@ -1377,7 +1382,7 @@ class DockShowAppsIconMenu extends DockAppIconMenu {
             ExtensionUtils.openPrefs();
         });
     }
-};
+}
 
 /**
  * This function is used for both extendShowAppsIcon and extendDashItemContainer

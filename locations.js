@@ -183,7 +183,7 @@ function makeLocationApp(params) {
     if (!params.location)
         throw new TypeError('Invalid location');
 
-    location = params.location;
+    const location = params.location;
     delete params.location;
 
     const shellApp = new Shell.App(params);
@@ -505,7 +505,7 @@ var Removables = class DashToDock_Removables {
 
     destroy() {
         this._signalsHandler.destroy();
-        this._monitor.run_dispose();
+        this._monitor = null;
     }
 
     _getWorkingIconName(icon) {

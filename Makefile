@@ -2,7 +2,7 @@
 
 UUID = floating-dock@nandoferreira_prof@hotmail.com
 BASE_MODULES = extension.js metadata.json COPYING README.md
-EXTRA_MODULES = dash.js docking.js appIcons.js appIconIndicators.js fileManager1API.js launcherAPI.js locations.js windowPreview.js intellihide.js prefs.js theming.js utils.js dbusmenuUtils.js Settings.ui
+EXTRA_MODULES = dash.js docking.js appIcons.js appIconIndicators.js fileManager1API.js launcherAPI.js locations.js windowPreview.js intellihide.js prefs.js theming.js utils.js dbusmenuUtils.js Settings.ui desktopIconsIntegration.js
 EXTRA_MEDIA = logo.svg glossy.svg highlight_stacked_bg.svg highlight_stacked_bg_h.svg
 TOLOCALIZE =  prefs.js appIcons.js locations.js
 MSGSRC = $(wildcard po/*.po)
@@ -82,7 +82,7 @@ endif
 	-rm -fR _build
 	echo done
 
-zip-file: _build
+zip-file: _build check
 	cd _build ; \
 	zip -qr "$(UUID)$(VSTRING).zip" .
 	mv _build/$(UUID)$(VSTRING).zip ./
@@ -106,3 +106,14 @@ _build: all
 		cp $$l $$lf/LC_MESSAGES/dashtodock.mo; \
 	done;
 	sed -i 's/"version": -1/"version": "$(VERSION)"/'  _build/metadata.json;
+
+ifeq ($(strip $(ESLINT)),)
+    ESLINT = eslint
+endif
+
+ifneq ($(strip $(ESLINT_TAP)),)
+    ESLINT_ARGS = -f tap
+endif
+
+check:
+	$(ESLINT) $(ESLINT_ARGS) .

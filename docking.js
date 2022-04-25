@@ -34,6 +34,7 @@ const DockDash = Me.imports.dash;
 const Locations = Me.imports.locations;
 const LauncherAPI = Me.imports.launcherAPI;
 const FileManager1API = Me.imports.fileManager1API;
+const DesktopIconsIntegration = Me.imports.desktopIconsIntegration;
 
 const DOCK_DWELL_CHECK_INTERVAL = 100;
 
@@ -178,19 +179,36 @@ var DashSlideContainer = GObject.registerClass({
 });
 
 var DockedDash = GObject.registerClass({
+    Properties: {
+        'is-main': GObject.ParamSpec.boolean(
+            'is-main', 'is-main', 'is-main',
+            GObject.ParamFlags.READWRITE | GObject.ParamFlags.CONSTRUCT_ONLY,
+            false),
+        'monitor-index': GObject.ParamSpec.uint(
+            'monitor-index', 'monitor-index', 'monitor-index',
+            GObject.ParamFlags.READWRITE | GObject.ParamFlags.CONSTRUCT_ONLY,
+            0, GLib.MAXUINT32, 0),
+    },
     Signals: {
         'showing': {},
         'hiding': {},
     }
 }, class DashToDock extends St.Bin {
+    _init(params) {
+        this._position = Utils.getPosition();
+        const positionStyleClass = ['top', 'right', 'bottom', 'left'];
 
-    _init(monitorIndex) {
+        // This is the centering actor
+        super._init({
+            ...params,
+            name: 'dashtodockContainer',
+            reactive: false,
+            style_class: positionStyleClass[this._position],
+        });
         this._rtl = (Clutter.get_default_text_direction() == Clutter.TextDirection.RTL);
 
         // Load settings
         let settings = DockManager.settings;
-        this._monitorIndex = monitorIndex;
-        this._position = Utils.getPosition();
         this._isHorizontal = ((this._position == St.Side.TOP) || (this._position == St.Side.BOTTOM));
 
         // Temporary ignore hover events linked to autohide for whatever reason
@@ -202,13 +220,13 @@ var DockedDash = GObject.registerClass({
         this._intellihideIsEnabled = null;
 
         // Create intellihide object to monitor windows overlapping
-        this._intellihide = new Intellihide.Intellihide(this._monitorIndex);
+        this._intellihide = new Intellihide.Intellihide(this.monitorIndex);
 
         // initialize dock state
         this._dockState = State.HIDDEN;
 
         // Put dock on the required monitor
-        this._monitor = Main.layoutManager.monitors[this._monitorIndex];
+        this._monitor = Main.layoutManager.monitors[this.monitorIndex];
 
         // this store size and the position where the dash is shown;
         // used by intellihide module to check window overlap.
@@ -227,27 +245,18 @@ var DockedDash = GObject.registerClass({
         this._dockDwellTimeoutId = 0
 
         // Create a new dash object
-        this.dash = new DockDash.DockDash(this._monitorIndex);
+        this.dash = new DockDash.DockDash(this.monitorIndex);
 
         if (Main.overview.isDummy || !settings.get_boolean('show-show-apps-button'))
             this.dash.hideShowAppsButton();
 
-        // Create the main actor and the containers for sliding in and out and
+        // Create the containers for sliding in and out and
         // centering, turn on track hover
-
-        let positionStyleClass = ['top', 'right', 'bottom', 'left'];
-        // This is the centering actor
-        super._init({
-            name: 'dashtodockContainer',
-            reactive: false,
-            style_class: positionStyleClass[this._position],
-        });
-
         // This is the sliding actor whose allocation is to be tracked for input regions
         this._slider = new DashSlideContainer({
             monitor_index: this._monitor.index,
             side: this._position,
-            slide_x: 0,
+            slide_x: Main.layoutManager._startingUp ? 0 : 1,
             ...(this._isHorizontal ? {
                 x_align: Clutter.ActorAlign.CENTER,
             } : {
@@ -341,7 +350,7 @@ var DockedDash = GObject.registerClass({
         this._slider.connect(this._isHorizontal ? 'notify::x' : 'notify::y', this._updateStaticBox.bind(this));
 
         // Load optional features that need to be activated for one dock only
-        if (this._monitorIndex == settings.get_int('preferred-monitor'))
+        if (this.isMain)
             this._enableExtraFeatures();
         // Load optional features that need to be activated once per dock
         this._optionalScrollWorkspaceSwitch();
@@ -391,10 +400,6 @@ var DockedDash = GObject.registerClass({
         this._resetPosition();
 
         this.connect('destroy', this._onDestroy.bind(this));
-    }
-
-    get monitorIndex() {
-        return this._monitorIndex;
     }
 
     get position() {
@@ -544,7 +549,10 @@ var DockedDash = GObject.registerClass({
         ], [
             settings,
             'changed::intellihide',
-            this._updateVisibilityMode.bind(this)
+            () => {
+                this._updateVisibilityMode();
+                this._updateVisibleDesktop();
+            }
         ], [
             settings,
             'changed::intellihide-mode',
@@ -1031,7 +1039,7 @@ var DockedDash = GObject.registerClass({
     }
 
     _isPrimaryMonitor() {
-        return (this._monitorIndex == Main.layoutManager.primaryIndex);
+        return (this.monitorIndex === Main.layoutManager.primaryIndex);
     }
 
     _resetPosition() {
@@ -1049,7 +1057,7 @@ var DockedDash = GObject.registerClass({
         // Note: do not use the workarea coordinates in the direction on which the dock is placed,
         // to avoid a loop [position change -> workArea change -> position change] with
         // fixed dock.
-        let workArea = Main.layoutManager.getWorkAreaForMonitor(this._monitorIndex);
+        let workArea = Main.layoutManager.getWorkAreaForMonitor(this.monitorIndex);
 
 
         let fraction = DockManager.settings.get_double('height-fraction');
@@ -1098,6 +1106,21 @@ var DockedDash = GObject.registerClass({
         }
     }
 
+    _updateVisibleDesktop() {
+        if (!this._intellihideIsEnabled)
+            return;
+
+        const { desktopIconsUsableArea } = DockManager.getDefault();
+        if (this._position === St.Side.BOTTOM)
+            desktopIconsUsableArea.setMargins(this._monitorIndex, 0, this._box.height, 0, 0);
+        else if (this._position === St.Side.TOP)
+            desktopIconsUsableArea.setMargins(this._monitorIndex, this._box.height, 0, 0, 0);
+        else if (this._position === St.Side.RIGHT)
+            desktopIconsUsableArea.setMargins(this._monitorIndex, 0, 0, 0, this._box.width);
+        else if (this._position === St.Side.LEFT)
+            desktopIconsUsableArea.setMargins(this._monitorIndex, 0, 0, this._box.width, 0);
+    }
+
     _updateStaticBox() {
         this.staticBox.init_rect(
             this.x + this._slider.x - (this._position == St.Side.RIGHT ? this._box.width : 0),
@@ -1107,6 +1130,7 @@ var DockedDash = GObject.registerClass({
         );
 
         this._intellihide.updateTargetBox(this.staticBox);
+        this._updateVisibleDesktop();
     }
 
     _removeAnimations() {
@@ -1205,12 +1229,13 @@ var DockedDash = GObject.registerClass({
             case Clutter.ScrollDirection.DOWN:
                 direction = next_direction;
                 break;
-            case Clutter.ScrollDirection.SMOOTH:
+            case Clutter.ScrollDirection.SMOOTH: {
                 let [dx, dy] = event.get_scroll_delta();
                 if (dy < 0)
                     direction = prev_direction;
                 else if (dy > 0)
                     direction = next_direction;
+                }
                 break;
             }
 
@@ -1448,31 +1473,20 @@ var WorkspaceIsolation = class DashToDock_WorkspaceIsolation {
         this._signalsHandler = new Utils.GlobalSignalsHandler();
         this._injectionsHandler = new Utils.InjectionsHandler();
 
-        this._signalsHandler.add([
-            settings,
-            'changed::isolate-workspaces',
-            () => {
-                    DockManager.allDocks.forEach((dock) =>
-                        dock.dash.resetAppIcons());
-                    if (settings.get_boolean('isolate-workspaces') ||
-                        settings.get_boolean('isolate-monitors'))
-                        this._enable.bind(this)();
-                    else
-                        this._disable.bind(this)();
-            }
-        ],[
-            settings,
-            'changed::isolate-monitors',
-            () => {
-                    DockManager.allDocks.forEach((dock) =>
-                        dock.dash.resetAppIcons());
-                    if (settings.get_boolean('isolate-workspaces') ||
-                        settings.get_boolean('isolate-monitors'))
-                        this._enable.bind(this)();
-                    else
-                        this._disable.bind(this)();
-            }
-        ]);
+        const updateAllDocks = () => {
+            DockManager.allDocks.forEach((dock) =>
+                dock.dash.resetAppIcons());
+            if (settings.get_boolean('isolate-workspaces') ||
+                settings.get_boolean('isolate-monitors'))
+                this._enable.bind(this)();
+            else
+                this._disable.bind(this)();
+        };
+        this._signalsHandler.add(
+            [ settings, 'changed::isolate-workspaces', updateAllDocks ],
+            [ settings, 'changed::workspace-agnostic-urgent-windows', updateAllDocks ],
+            [ settings, 'changed::isolate-monitors', updateAllDocks ]
+        );
 
         if (settings.get_boolean('isolate-workspaces') ||
             settings.get_boolean('isolate-monitors'))
@@ -1487,15 +1501,13 @@ var WorkspaceIsolation = class DashToDock_WorkspaceIsolation {
         this._disable();
 
         DockManager.allDocks.forEach((dock) => {
-            this._signalsHandler.addWithLabel('isolation', [
-                global.display,
-                'restacked',
-                dock.dash._queueRedisplay.bind(dock.dash)
-            ], [
-                global.window_manager,
-                'switch-workspace',
-                dock.dash._queueRedisplay.bind(dock.dash)
-            ]);
+            this._signalsHandler.addWithLabel(
+                'isolation',
+                [ global.display, 'restacked', () => dock.dash._queueRedisplay() ],
+                [ global.display, 'window-marked-urgent', () => dock.dash._queueRedisplay() ],
+                [ global.display, 'window-demands-attention', () => dock.dash._queueRedisplay() ],
+                [ global.window_manager, 'switch-workspace', () => dock.dash._queueRedisplay() ]
+            );
 
             // This last signal is only needed for monitor isolation, as windows
             // might migrate from one monitor to another without triggering 'restacked'
@@ -1554,6 +1566,7 @@ var DockManager = class DashToDock_DockManager {
         this._vfuncInjections = new Utils.VFuncInjectionsHandler(this);
         this._propertyInjections = new Utils.PropertyInjectionsHandler(this);
         this._settings = ExtensionUtils.getSettings('org.gnome.shell.extensions.dash-to-dock');
+        this._desktopIconsUsableArea = new DesktopIconsIntegration.DesktopIconsUsableAreaClass();
         this._oldDash = Main.overview.isDummy ? null : Main.overview.dash;
 
         // Connect relevant signals to the toggling function
@@ -1590,7 +1603,7 @@ var DockManager = class DashToDock_DockManager {
         return DockManager.getDefault().iconTheme;
     }
 
-    get settings() {
+    get settings() { // eslint-disable-line no-dupe-class-members
         return this._settings;
     }
 
@@ -1616,6 +1629,10 @@ var DockManager = class DashToDock_DockManager {
 
     get trash() {
         return this._trash;
+    }
+
+    get desktopIconsUsableArea() {
+        return this._desktopIconsUsableArea;
     }
 
     getDockByMonitor(monitorIndex) {
@@ -1749,6 +1766,10 @@ var DockManager = class DashToDock_DockManager {
             this._toggle.bind(this)
         ], [
             this._settings,
+            'changed::preferred-monitor-by-connector',
+            this._toggle.bind(this)
+        ], [
+            this._settings,
             'changed::dock-position',
             this._toggle.bind(this)
         ], [
@@ -1771,6 +1792,13 @@ var DockManager = class DashToDock_DockManager {
             this._settings,
             'changed::isolate-locations',
             () => this._ensureLocations()
+        ], [
+            this._settings,
+            'changed::intellihide',
+            () => {
+                if (!this._settings.intellihide)
+                    this._desktopIconsUsableArea.resetMargins();
+            }
         ]);
     }
 
@@ -1785,14 +1813,11 @@ var DockManager = class DashToDock_DockManager {
         }
 
         this._preferredMonitorIndex = this._settings.get_int('preferred-monitor');
-        // In case of multi-monitor, we consider the dock on the primary monitor to be the preferred (main) one
-        // regardless of the settings
-        // The dock goes on the primary monitor also if the settings are incosistent (e.g. desired monitor not connected).
-        if (this._settings.get_boolean('multi-monitor') ||
-            this._preferredMonitorIndex < 0 || this._preferredMonitorIndex > Main.layoutManager.monitors.length - 1
-            ) {
-            this._preferredMonitorIndex = Main.layoutManager.primaryIndex;
-        } else {
+        if (this._preferredMonitorIndex === -2) {
+            const monitorManager = Meta.MonitorManager.get();
+            this._preferredMonitorIndex = monitorManager.get_monitor_for_connector(
+                this._settings.get_string('preferred-monitor-by-connector'));
+        } else if (this._preferredMonitorIndex >= 0) {
             // Primary monitor used to be always 0 in Gdk, but the shell has a different
             // concept (where the order depends on mutter order).
             // So even if now the extension settings may use the same logic of the shell
@@ -1803,8 +1828,21 @@ var DockManager = class DashToDock_DockManager {
             this._preferredMonitorIndex = (Main.layoutManager.primaryIndex + this._preferredMonitorIndex) % Main.layoutManager.monitors.length ;
         }
 
+        // In case of multi-monitor, we consider the dock on the primary monitor
+        // to be the preferred (main) one regardless of the settings the dock
+        // goes on the primary monitor also if the settings are inconsistent
+        // (e.g. desired monitor not connected).
+        if (this._settings.get_boolean('multi-monitor') ||
+            this._preferredMonitorIndex < 0 ||
+            this._preferredMonitorIndex > Main.layoutManager.monitors.length - 1) {
+            this._preferredMonitorIndex = Main.layoutManager.primaryIndex;
+        }
+
         // First we create the main Dock, to get the extra features to bind to this one
-        let dock = new DockedDash(this._preferredMonitorIndex);
+        let dock = new DockedDash({
+            monitorIndex: this._preferredMonitorIndex,
+            isMain: true,
+        });
         this._allDocks.push(dock);
 
         // connect app icon into the view selector
@@ -1821,7 +1859,7 @@ var DockManager = class DashToDock_DockManager {
             for (let iMon = 0; iMon < nMon; iMon++) {
                 if (iMon == this._preferredMonitorIndex)
                     continue;
-                let dock = new DockedDash(iMon);
+                dock = new DockedDash({ monitorIndex: iMon });
                 this._allDocks.push(dock);
                 // connect app icon into the view selector
                 dock.dash.showAppsButton.connect('notify::checked', this._onShowAppsButtonToggled.bind(this));
@@ -2016,7 +2054,7 @@ var DockManager = class DashToDock_DockManager {
             const workspaceBox = originalFunction.call(this, state, workAreaBox, ...args);
             workspaceBox.set_origin(workAreaBox.x1, workspaceBox.y1);
             return workspaceBox;
-        };
+        }
 
         this._methodInjections.addWithLabel('main-dash', [
             ControlsManagerLayout.prototype,
@@ -2124,6 +2162,7 @@ var DockManager = class DashToDock_DockManager {
         // Remove extra features
         this._workspaceIsolation.destroy();
         this._keyboardShortcuts.destroy();
+        this._desktopIconsUsableArea.resetMargins();
 
         // Delete all docks
         this._allDocks.forEach(d => d.destroy());
@@ -2226,6 +2265,7 @@ var DockManager = class DashToDock_DockManager {
         }
         this._trash?.destroy();
         this._trash = null;
+        Locations.unWrapWindowsManagerApp();
         this._removables?.destroy();
         this._removables = null;
         this._iconTheme.destroy();
@@ -2234,6 +2274,8 @@ var DockManager = class DashToDock_DockManager {
         this._settings = null;
         this._oldDash = null;
 
+        this._desktopIconsUsableArea.destroy();
+        this._desktopIconsUsableArea = null;
         Me.imports.extension.dockManager = null;
     }
 
