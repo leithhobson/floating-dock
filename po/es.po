@@ -110,7 +110,7 @@ msgstr "Focalizar o mostrar previsualizaciones"
 
 #: Settings.ui.h:11
 msgid "Quit"
-msgstr "Salir"
+msgstr "Cerrar"
 
 #: Settings.ui.h:12
 msgid "Behavior for Middle-Click."
@@ -519,3 +519,55 @@ msgstr "Mostrar el icono Papelera"
 #: Settings.ui.h:109
 msgid "Show mounted volumes and devices"
 msgstr "Mostrar los dispositivos montados"
+
+#: appIcons.js:1148
+#, javascript-format
+msgid "Quit %d Windows"
+msgstr "Cerrar %d ventanas"
+
+#. Translators: %s is "Settings", which is automatically translated. You
+#. can also translate the full message if this fits better your language.
+#: appIcons.js:1092
+#, javascript-format
+msgid "Dash to Dock %s"
+msgstr "%s • Dash to Dock"
+
+#: appIcons.js:1001
+msgid "All Windows"
+msgstr "Todas las ventanas"
+
+#: Settings.ui.h:36
+msgid "Preview size scale"
+msgstr "Tamaño de la ventana de previsualización"
+
+#: Settings.ui.h:42
+msgid "Show urgent windows despite current workspace."
+msgstr "Mostrar ventanas urgentes sin importar el espacio de trabajo actual."
+
+#: Settings.ui.h:43
+msgid "Keep the focused application always visible in the dash"
+msgstr "Mantener la aplicación seleccionada siempre visible en el dock"
+
+#: Settings.ui.h:50
+msgid "Isolate volumes, devices and trash windows from file manager"
+msgstr "Abrir volúmenes, dispositivos y papelera en ventana aparte."
+
+#: locations.js:412
+msgid "Trash"
+msgstr "Papelera"
+
+#: locations.js:420
+msgid "Empty Trash"
+msgstr "Vaciar papelera"
+
+#: locations.js:558
+msgid "Mount"
+msgstr "Montar"
+
+#: locations.js:604
+msgid "Eject"
+msgstr "Expulsar"
+
+#: locations.js:609
+msgid "Unmount"
+msgstr "Desmontar"
